@@ -97,7 +97,7 @@ Sources: [Ofcom consultation](https://www.ofcom.org.uk/online-safety/online-frau
 |---|---|
 | `blocklist.txt` | The Pi-hole adlist (ABP-style `\|\|domain^` entries) |
 | `detect_adshield.py` | Finds Ad-Shield domains (decoded script + Pi-hole query log) and appends new ones to the blocklist |
-| `deploy/run.sh` | Hourly wrapper: runs the detector, reloads gravity and FTL only when something was added |
+| `deploy/run.sh` | Hourly wrapper: pulls the repo, runs the detector, reloads gravity/FTL when the list changes, commits and pushes new domains |
 | `deploy/adshield.cron` | Cron entry installed as `/etc/cron.d/adshield` |
 
 ## How Phoronix serves ads past a blocker
@@ -232,41 +232,58 @@ Only Python 3.9+ standard library modules are used.
 ## Deployment (current setup)
 
 Pi-hole host: `192.168.5.253` (CentOS Stream 9, Pi-hole v6.4.3), access by SSH key as root.
+`/opt/adshield` on the Pi-hole is a **clone of this repository**, so the Pi-hole runs exactly
+what's committed here and pushes its blocklist updates back.
 
 | Item | Location |
 |---|---|
-| Script + blocklist + wrapper | `/opt/adshield/` |
+| Repo clone (script, blocklist, wrapper) | `/opt/adshield/` |
 | Adlist | `file:///opt/adshield/blocklist.txt` (gravity adlist id 81) |
-| Cron | `/etc/cron.d/adshield`, at :17 past every hour |
+| Cron | `/etc/cron.d/adshield` runs `/opt/adshield/deploy/run.sh` at :17 past every hour |
 | Log | `/var/log/adshield.log` |
+| GitHub deploy key (write, this repo only) | `/root/.ssh/adshield_deploy` |
 
-To install from scratch:
+Each hourly run of `deploy/run.sh`:
+
+1. `git pull --rebase` so local commits apply cleanly. If `blocklist.txt` changed on GitHub,
+   gravity is reloaded.
+2. Runs `detect_adshield.py`. If it adds domains, it reloads gravity and commits
+   `blocklist.txt` as `blocklist: add <domains>`.
+3. Pushes any commits not yet on GitHub (failed pushes are retried next run). Without the
+   deploy key it still updates the Pi-hole and keeps the commits locally.
+
+`run.sh` runs `pihole reloadlists` after `pihole -g`: without it, FTL kept answering newly
+listed domains until it was told to reload.
+
+Because the Pi-hole pulls from GitHub every hour and runs the code as root, anything pushed
+to `main` ends up running on the Pi-hole. Review changes before pushing.
+
+### Install from scratch
 
 ```bash
-ssh root@PIHOLE 'mkdir -p /opt/adshield'
-scp detect_adshield.py blocklist.txt deploy/run.sh root@PIHOLE:/opt/adshield/
-scp deploy/adshield.cron root@PIHOLE:/etc/cron.d/adshield
-ssh root@PIHOLE 'chmod 755 /opt/adshield /opt/adshield/*.py /opt/adshield/run.sh
-  chmod 644 /opt/adshield/blocklist.txt /etc/cron.d/adshield
+# 1. Deploy key on the Pi-hole, added to the repo with write access
+ssh root@PIHOLE 'ssh-keygen -t ed25519 -N "" -C pihole-adshield-deploy -f /root/.ssh/adshield_deploy && cat /root/.ssh/adshield_deploy.pub'
+gh repo deploy-key add adshield_deploy.pub --repo damo2929/myaddblocklist --allow-write --title "pihole adshield auto-push"
+
+# 2. Clone, schedule and register the adlist
+ssh root@PIHOLE '
+  GIT_SSH_COMMAND="ssh -i /root/.ssh/adshield_deploy -o IdentitiesOnly=yes" \
+    git clone git@github.com:damo2929/myaddblocklist.git /opt/adshield
+  git -C /opt/adshield config user.name "pihole-adshield"
+  git -C /opt/adshield config user.email "pihole-adshield@users.noreply.github.com"
+  cp /opt/adshield/deploy/adshield.cron /etc/cron.d/adshield && chmod 644 /etc/cron.d/adshield
   sqlite3 /etc/pihole/gravity.db "INSERT OR IGNORE INTO adlist (address, enabled, comment)
     VALUES (\"file:///opt/adshield/blocklist.txt\", 1, \"Ad-Shield rotating domains\");"
   pihole -g && pihole reloadlists'
 ```
 
-`run.sh` runs `pihole reloadlists` after `pihole -g`: without it, FTL kept answering newly
-listed domains until it was told to reload.
-
-The live blocklist is the one on the Pi-hole. To pull it back into the project:
-
-```bash
-scp root@192.168.5.253:/opt/adshield/blocklist.txt .
-```
+To pick up the Pi-hole's latest commits locally, run `git pull`.
 
 To check it's working:
 
 ```bash
 dig @192.168.5.253 5.nicelyeven.com     # expect NXDOMAIN
-ssh root@192.168.5.253 'pihole -q 5.nicelyeven.com; tail /var/log/adshield.log'
+ssh root@192.168.5.253 'pihole -q 5.nicelyeven.com; tail /var/log/adshield.log; git -C /opt/adshield log --oneline -3'
 ```
 
 ## Limitations

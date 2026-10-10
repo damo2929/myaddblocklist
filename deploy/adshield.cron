@@ -1,1 +1,1 @@
-17 * * * * root /opt/adshield/run.sh >> /var/log/adshield.log 2>&1
+17 * * * * root /opt/adshield/deploy/run.sh >> /var/log/adshield.log 2>&1
