@@ -6,6 +6,19 @@ to a new throwaway domain about once a week. This project reads the upcoming dom
 Ad-Shield's own (obfuscated) script so they're blocked **before** they're used, and falls back
 to spotting them in the Pi-hole's query log. New domains go into `blocklist.txt` automatically.
 
+## Why this exists
+
+Ad-Shield is a game of cat and mouse. Each time a blocklist catches up with it, it moves to
+a fresh domain to push its ads, and with them the risk of malvertising, back onto our screens.
+It also goes out of its way to dodge detection: encrypted strings, fallback CDN mirrors, a
+WebSocket channel that delivers code as a last resort, and bot checks that stop automated
+browsers from seeing what it does.
+
+This project doesn't wait for the next domain to show up. It reads Ad-Shield's own playbook
+(the rotation list inside its script) and blocks the domains it plans to use before it uses
+them. The Pi-hole log scan is a backup for anything that gets through first. The aim is to
+stay ahead in that race instead of reacting to each move after the ads have already loaded.
+
 ## Contents
 
 | File | Purpose |
