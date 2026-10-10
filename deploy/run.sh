@@ -18,12 +18,15 @@ python3 detect_adshield.py --db /etc/pihole/pihole-FTL.db --hours 24
 rc=$?
 chmod 644 blocklist.txt
 
-if [ $rc -eq 2 ]; then
+# Commit only when blocklist.txt actually differs from what's committed; nothing else is staged.
+if ! git diff --quiet -- blocklist.txt; then
   reload=1
-  added=$(git diff -U0 blocklist.txt | grep -oP '^\+\|\|\K[^^]+' | paste -sd, -)
-  git add blocklist.txt
+  added=$(git diff -U0 -- blocklist.txt | grep -oP '^\+\|\|\K[^^]+' | paste -sd, -)
+  git add -- blocklist.txt
   git commit -q -m "blocklist: add ${added:-new domains}" \
-    -m "Auto-detected on the Pi-hole by detect_adshield.py." && echo "committed: ${added}"
+    -m "Auto-detected on the Pi-hole by detect_adshield.py." -- blocklist.txt && echo "committed: ${added}"
+elif [ $rc -eq 2 ]; then
+  reload=1
 fi
 
 if [ $reload -eq 1 ]; then
@@ -31,7 +34,7 @@ if [ $reload -eq 1 ]; then
   pihole -g >/dev/null 2>&1 && pihole reloadlists >/dev/null 2>&1 && echo "gravity reloaded"
 fi
 
-# Push anything not yet on GitHub, including commits left over from earlier failed pushes.
+# Push only if there are blocklist commits not yet on GitHub (incl. ones from failed pushes).
 if [ -n "$(git log --oneline '@{u}..' 2>/dev/null)" ]; then
   if [ -f "$KEY" ]; then
     git push -q && echo "pushed to GitHub" || echo "git push failed; will retry next run"
