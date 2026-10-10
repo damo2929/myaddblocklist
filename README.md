@@ -50,10 +50,32 @@ to the visitor's browser and run **on the visitor's own computer**:
 served from Ad-Shield's GitHub repository (`github.com/ad-shield/e`, through public CDNs) and
 from domains Ad-Shield controls (`html-load.cc` and the rotation domains). We have no
 relationship with Ad-Shield and have **not consented** to it running code on our devices.
-Blocking its domains with an ad blocker or DNS filter is an explicit refusal.
+Blocking its domains with an ad blocker or DNS filter is an explicit refusal. Under the UK's
+Privacy and Electronic Communications Regulations (PECR, regulation 6), storing or reading
+information on a user's device needs consent obtained **in advance**: freely given,
+specific, informed and given by a clear affirmative action. So the refusal is on top of
+what the rules require, not something the user should have to give.
 
 So code from a third party we haven't agreed to is delivered to, stored on and run on the
 user's machine, specifically to get around that refusal.
+
+**Evasion techniques.** Obfuscated JavaScript on its own is common on legitimate sites:
+it's used to shrink code, protect a vendor's code from copying, and in bot-protection
+scripts. What stands out here is the combination. Each technique below is one commonly
+associated with malware, and here they're used to defeat the user's own security and
+privacy controls:
+
+| Ad-Shield does | Where this is usually seen |
+|---|---|
+| Encrypts its strings so domains and URLs don't appear in the source | Malware hiding its command-and-control servers from scanners |
+| The loader deletes its own `<script>` tag after running | Malware removing its traces |
+| Rotates throwaway domains to stay ahead of blocklists | Malware swapping domains to stay ahead of blocklists |
+| Has fallback chains across several CDNs | Resilient malware infrastructure |
+| Takes JavaScript sent over a WebSocket and runs it | Malware fetching instructions from its control server; the code never appears anywhere it can be checked |
+| Exists to override a choice the user made on their own device | The opposite of what consent-based software does |
+
+We haven't seen it steal data or damage the device, so this isn't a claim that it's malware.
+It's a description of the techniques it uses and what they're for.
 
 **A regulatory gap.** The UK Online Safety Act 2023's duties on fraudulent (scam) adverts
 apply only to services Ofcom designates as Category 1 (the largest social media platforms)
