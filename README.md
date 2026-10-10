@@ -282,6 +282,35 @@ Everything runs over the local-only webhook, so no token is involved:
   | `input_number.ad_shield_listed_domains` | number of entries in the blocklist |
   | `input_datetime.ad_shield_last_run` | time of the last run, so a stalled cron shows up |
 
+- **Dashboard**: an "Ad-Shield blocklist" section on the **Internet** dashboard, next to the
+  Pi-hole card. It holds an entities card (status, copies decoded, last domains added, domains
+  blocked, last run, link to this repo) and a markdown card listing the rotation domains one per
+  line. All rows are read-only `simple-entity` rows, so the helpers can't be edited by accident.
+
+  ```yaml
+  type: grid
+  cards:
+    - type: entities
+      title: Ad-Shield blocklist
+      icon: mdi:shield-check
+      state_color: true
+      grid_options: {columns: full, rows: auto}
+      entities:
+        - {type: simple-entity, entity: input_select.ad_shield_status, name: Decoder status}
+        - {type: simple-entity, entity: input_text.ad_shield_decoded_copies, name: Script copies decoded}
+        - {type: simple-entity, entity: input_text.ad_shield_last_new_domains, name: Last domains added}
+        - {type: simple-entity, entity: input_number.ad_shield_listed_domains, name: Domains blocked}
+        - {type: simple-entity, entity: input_datetime.ad_shield_last_run, name: Last run (hourly)}
+        - {type: weblink, name: Blocklist on GitHub, url: "https://github.com/damo2929/myaddblocklist", icon: "mdi:github"}
+    - type: markdown
+      grid_options: {columns: full, rows: auto}
+      content: |-
+        **Ad-Shield rotation domains** (decoded from its script, in order)
+        {% set d = states('input_text.ad_shield_rotation_domains') %}{% if d in ['unknown','unavailable',''] %}
+        _No data yet_{% else %}{% for x in d.split(', ') %}
+        - `{{ x }}`{% endfor %}{% endif %}
+  ```
+
 A minimal webhook automation that only does the notification part:
 
 ```yaml
