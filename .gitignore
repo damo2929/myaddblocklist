@@ -1,2 +1,4 @@
 __pycache__/
 *.pyc
+adshield.conf
+.notify-state.json

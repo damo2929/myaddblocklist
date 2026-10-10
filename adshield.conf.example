@@ -1,0 +1,40 @@
+# Alert settings for detect_adshield.py.
+# Copy to adshield.conf (same directory as the script), fill in the channels you want and
+# delete or leave blank the rest. adshield.conf is gitignored: it holds tokens and addresses,
+# so keep it out of the repo and readable by root only (chmod 600 adshield.conf).
+#
+# Alerts are sent when Ad-Shield's script can no longer be decoded (and once when it
+# recovers). Test every configured channel with:  ./detect_adshield.py --test-alert
+
+# Re-send an unchanged failure alert after this many hours
+REMIND_HOURS=24
+
+# --- Email via SMTP relay -------------------------------------------------------------
+# Where alerts go (comma-separated for several recipients)
+NOTIFY_TO=
+# Sender address (default: adshield@<hostname>)
+NOTIFY_FROM=
+SMTP_HOST=
+SMTP_PORT=25
+# none | starttls | ssl  (ssl defaults the port to 465)
+SMTP_SECURITY=none
+
+# --- Telegram -------------------------------------------------------------------------
+# Create a bot with @BotFather to get the token. Send the bot a message, then read your
+# chat id from https://api.telegram.org/bot<TOKEN>/getUpdates  (message.chat.id).
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
+
+# --- Home Assistant: webhook (alerts) ---------------------------------------------------
+# Create an automation with a Webhook trigger; paste its URL here. The JSON body has:
+#   event (decoder_failed | decoder_recovered | test), title, message, host
+# e.g. use {{ trigger.json.title }} / {{ trigger.json.message }} in a notify action.
+HA_WEBHOOK_URL=
+
+# --- Home Assistant: status sensor (updated every run) ---------------------------------
+# Profile > Security > Long-lived access tokens. The entity is created on first update;
+# state is "ok" or "decoder_failing", attributes include decoded_copies, rotation_domains,
+# new_domains, listed and last_run.
+HA_URL=
+HA_TOKEN=
+HA_ENTITY=sensor.adshield

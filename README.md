@@ -97,6 +97,7 @@ Sources: [Ofcom consultation](https://www.ofcom.org.uk/online-safety/online-frau
 |---|---|
 | `blocklist.txt` | The Pi-hole adlist (ABP-style `\|\|domain^` entries) |
 | `detect_adshield.py` | Finds Ad-Shield domains (decoded script + Pi-hole query log) and appends new ones to the blocklist |
+| `adshield.conf.example` | Template for alert settings (email, Telegram, Home Assistant); copy to `adshield.conf` |
 | `deploy/run.sh` | Hourly wrapper: pulls the repo, runs the detector, reloads gravity/FTL when the list changes, commits and pushes new domains |
 | `deploy/adshield.cron` | Cron entry installed as `/etc/cron.d/adshield` |
 
@@ -225,9 +226,58 @@ PIHOLE_URL=http://192.168.5.253 PIHOLE_PASSWORD=... ./detect_adshield.py --dry-r
 | `--min-shards N` | 3 | numbered subdomains needed to flag a domain |
 | `--exclude DOMAIN` | | base domain to ignore (repeatable) |
 | `--blocklist PATH` | `./blocklist.txt` | file to update |
-| `--dry-run` | | report only |
+| `--dry-run` | | report only; alerts are printed, not sent |
+| `--config PATH` | `./adshield.conf` | alert settings |
+| `--test-alert` | | send a test alert to every configured channel (and update the HA sensor), then exit |
 
 Only Python 3.9+ standard library modules are used.
+
+## Alerts: email, Telegram, Home Assistant
+
+The decoder breaks if Ad-Shield changes its obfuscation (see [Limitations](#limitations)), so
+the script reports it. When a copy of the script **downloads but can't be decoded**, an alert
+goes to every channel configured in `adshield.conf`. Download failures and timeouts don't
+trigger alerts, since mirrors are often flaky.
+
+- **One alert per failure:** the same failure isn't re-sent until it changes or
+  `REMIND_HOURS` (default 24) pass. State is kept in `.notify-state.json`.
+- **Recovery:** one "working again" alert is sent once every downloaded copy decodes.
+- **Early warning:** an alert fires as soon as *any* copy fails, so a format change shows up
+  on the first mirror that serves it, while the others still provide the domain list.
+
+| Channel | Settings | Notes |
+|---|---|---|
+| Email | `NOTIFY_TO`, `NOTIFY_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY` (`none`/`starttls`/`ssl`) | Through your SMTP relay; no SMTP login is supported. |
+| Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Bot from @BotFather; chat id from `getUpdates`. |
+| Home Assistant webhook | `HA_WEBHOOK_URL` | POSTs `{event, title, message, host}`; `event` is `decoder_failed`, `decoder_recovered` or `test`. Trigger an automation from it. |
+| Home Assistant sensor | `HA_URL`, `HA_TOKEN`, `HA_ENTITY` (default `sensor.adshield`) | Updated **every run** via the REST API with a long-lived token. State `ok` / `decoder_failing`; attributes `decoded_copies`, `decode_failures`, `rotation_domains`, `new_domains`, `listed`, `last_run`. |
+
+Setup on the Pi-hole:
+
+```bash
+cd /opt/adshield
+cp adshield.conf.example adshield.conf && chmod 600 adshield.conf   # holds tokens
+vi adshield.conf
+python3 detect_adshield.py --test-alert
+```
+
+Example Home Assistant automation for the webhook:
+
+```yaml
+triggers:
+  - trigger: webhook
+    webhook_id: adshield            # HA_WEBHOOK_URL=http://HA:8123/api/webhook/adshield
+    allowed_methods: [POST]
+    local_only: true
+actions:
+  - action: notify.notify
+    data:
+      title: "{{ trigger.json.title }}"
+      message: "{{ trigger.json.message }}"
+```
+
+A sensor state set through the REST API isn't kept across Home Assistant restarts. It comes
+back on the next hourly run.
 
 ## Deployment (current setup)
 
@@ -291,7 +341,9 @@ ssh root@192.168.5.253 'pihole -q 5.nicelyeven.com; tail /var/log/adshield.log; 
 - **The script decoder depends on the obfuscation format.** If Ad-Shield changes its
   obfuscator settings (e.g. drops RC4, adds wrapper functions), every copy fails with
   "decoder not found" or "rotation checksum not found" and the exit code becomes 1. The
-  log scan keeps working as a backup; `decode_strings()` then needs updating.
+  log scan keeps working as a backup; `decode_strings()` then needs updating. This is
+  reported through the [alerts](#alerts-email-telegram-home-assistant) as soon as any copy
+  fails.
 - **Log scan has a gap of up to an hour.** A domain that isn't in any script copy is only
   seen after a browser on the network has used it.
 - **Headless Chrome didn't work:** Phoronix shows a Cloudflare bot check on the second page

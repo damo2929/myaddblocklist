@@ -26,15 +26,25 @@ Examples:
   sudo ./detect_adshield.py --db /etc/pihole/pihole-FTL.db
   PIHOLE_PASSWORD=... ./detect_adshield.py --hours 72
 
+Alerts: if a copy of the script downloads but can no longer be decoded (Ad-Shield changed
+its obfuscation), an alert goes to every channel configured in adshield.conf (see
+adshield.conf.example): email via an SMTP relay, Telegram, and/or a Home Assistant webhook.
+Repeats are suppressed until the failure changes or REMIND_HOURS pass, and a recovery alert
+is sent once decoding works again. Optionally a Home Assistant sensor is updated every run.
+--test-alert checks the setup.
+
 Exit codes: 0 = nothing new, 2 = new domains found (added unless --dry-run), 1 = error.
 """
 
 import argparse
 import ast
+import hashlib
 import json
 import math
 import os
 import re
+import smtplib
+import socket
 import sqlite3
 import ssl
 import sys
@@ -44,6 +54,8 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
+from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
 from pathlib import Path
 
 # <digit>.<label>.<tld>: the base must be exactly two labels, which keeps out legit
@@ -233,6 +245,149 @@ def script_domains(url):
     return ver.group(1) if ver else "?", domains
 
 
+# ---- alerts: email, Telegram, Home Assistant -----------------------------------------
+
+def load_config(path):
+    """Read KEY=VALUE lines (shell-style, # comments, optional quotes)."""
+    cfg = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                cfg[k.strip()] = v.strip().strip("'\"")
+    return cfg
+
+
+def _post(url, data=None, json_body=None, headers=None):
+    body = json.dumps(json_body).encode() if json_body is not None else urllib.parse.urlencode(data).encode()
+    h = {"Content-Type": "application/json" if json_body is not None else "application/x-www-form-urlencoded"}
+    h.update(headers or {})
+    with urllib.request.urlopen(urllib.request.Request(url, data=body, headers=h, method="POST"), timeout=30) as r:
+        return r.status
+
+
+class Notifier:
+    """Sends alerts to every configured channel and keeps a Home Assistant sensor up to date."""
+
+    def __init__(self, config_path, dry_run):
+        self.cfg = load_config(config_path)
+        self.config_path = config_path
+        self.state_path = config_path.with_name(".notify-state.json")
+        self.dry_run = dry_run
+        self.host = socket.gethostname()
+
+    @property
+    def channels(self):
+        c = self.cfg
+        return [name for name, on in [
+            ("email", c.get("NOTIFY_TO") and c.get("SMTP_HOST")),
+            ("telegram", c.get("TELEGRAM_BOT_TOKEN") and c.get("TELEGRAM_CHAT_ID")),
+            ("home-assistant webhook", c.get("HA_WEBHOOK_URL")),
+        ] if on]
+
+    def send(self, subject, body, event="alert"):
+        """Send to all channels; returns True if at least one succeeded."""
+        if self.dry_run:
+            print(f"\n--dry-run: would send to {', '.join(self.channels) or 'no channels'}:\n"
+                  f"  {subject}\n" + "\n".join("  " + l for l in body.splitlines()))
+            return False
+        ok = False
+        for name, fn in [("email", self._email), ("telegram", self._telegram),
+                         ("home-assistant webhook", self._ha_webhook)]:
+            if name not in self.channels:
+                continue
+            try:
+                fn(subject, body, event)
+                print(f"Alert sent via {name}: {subject}")
+                ok = True
+            except (OSError, smtplib.SMTPException, ValueError) as e:
+                print(f"Alert via {name} failed: {e}", file=sys.stderr)
+        return ok
+
+    def _email(self, subject, body, event):
+        c = self.cfg
+        msg = EmailMessage()
+        msg["Subject"] = f"[adshield@{self.host}] {subject}"
+        msg["From"] = c.get("NOTIFY_FROM") or f"adshield@{self.host}"
+        msg["To"] = c["NOTIFY_TO"]
+        msg["Date"] = formatdate(localtime=True)
+        msg["Message-ID"] = make_msgid(domain=self.host)
+        msg.set_content(body)
+        security = c.get("SMTP_SECURITY", "none").lower()
+        port = int(c.get("SMTP_PORT") or (465 if security == "ssl" else 25))
+        cls = smtplib.SMTP_SSL if security == "ssl" else smtplib.SMTP
+        with cls(c["SMTP_HOST"], port, timeout=30) as smtp:
+            if security == "starttls":
+                smtp.starttls(context=ssl.create_default_context())
+            smtp.send_message(msg)
+
+    def _telegram(self, subject, body, event):
+        text = f"adshield@{self.host}: {subject}\n\n{body}"[:4096]  # Telegram's message limit
+        _post(f"https://api.telegram.org/bot{self.cfg['TELEGRAM_BOT_TOKEN']}/sendMessage",
+              data={"chat_id": self.cfg["TELEGRAM_CHAT_ID"], "text": text, "disable_web_page_preview": "true"})
+
+    def _ha_webhook(self, subject, body, event):
+        _post(self.cfg["HA_WEBHOOK_URL"], json_body={
+            "event": event, "title": subject, "message": body, "host": self.host})
+
+    def decoder_status(self, failures, total, decoded):
+        """Alert on decode failures (deduplicated), and once on recovery."""
+        try:
+            state = json.loads(self.state_path.read_text())
+        except (OSError, ValueError):
+            state = {}
+        now = time.time()
+        if failures:
+            sig = hashlib.sha256(json.dumps(sorted(failures)).encode()).hexdigest()
+            remind = float(self.cfg.get("REMIND_HOURS") or 24) * 3600
+            if state.get("sig") == sig and now - state.get("sent", 0) < remind:
+                return
+            if not self.channels:
+                print(f"(alerts not configured: see adshield.conf.example, expected at {self.config_path})",
+                      file=sys.stderr)
+                return
+            lines = [f"Ad-Shield's script could not be decoded from {len(failures)} of {total} copies.",
+                     "The obfuscation format has probably changed, so upcoming rotation domains",
+                     "are no longer read in advance. The Pi-hole log scan still runs as a backup.",
+                     "", "Failures:"]
+            lines += [f"  {url}\n      {err}" for url, err in failures]
+            lines += ["", "Fix: update decode_strings() in detect_adshield.py (see README, Limitations).",
+                      "Test with: ./detect_adshield.py --no-log --dry-run"]
+            if self.send(f"Ad-Shield decoder failed on {len(failures)}/{total} copies",
+                         "\n".join(lines), event="decoder_failed"):
+                self._save({"sig": sig, "sent": now, "failing": True})
+        elif state.get("failing") and decoded and self.channels:
+            if self.send("Ad-Shield decoder working again",
+                         f"{decoded} of {total} copies of Ad-Shield's script decoded, with no decode failures.",
+                         event="decoder_recovered"):
+                self._save({})
+
+    def ha_sensor(self, attrs):
+        """Set a Home Assistant entity to this run's status via the REST API (every run)."""
+        url, token = self.cfg.get("HA_URL"), self.cfg.get("HA_TOKEN")
+        if not (url and token):
+            return
+        entity = self.cfg.get("HA_ENTITY", "sensor.adshield")
+        state = "decoder_failing" if attrs.get("decode_failures") else "ok"
+        attrs = dict(attrs, friendly_name="Ad-Shield blocklist", icon="mdi:shield-check"
+                     if state == "ok" else "mdi:shield-alert", host=self.host)
+        if self.dry_run:
+            print(f"--dry-run: would set {entity} = {state} {json.dumps(attrs)}")
+            return
+        try:
+            _post(f"{url.rstrip('/')}/api/states/{entity}", json_body={"state": state, "attributes": attrs},
+                  headers={"Authorization": f"Bearer {token}"})
+        except (OSError, ValueError) as e:
+            print(f"Home Assistant sensor update failed: {e}", file=sys.stderr)
+
+    def _save(self, state):
+        try:
+            self.state_path.write_text(json.dumps(state))
+        except OSError as e:
+            print(f"Could not write {self.state_path}: {e}", file=sys.stderr)
+
+
 # ---- log source ----------------------------------------------------------------------
 
 class PiHoleAPI:
@@ -344,8 +499,19 @@ def main():
                     help="base domain to ignore (repeatable)")
     ap.add_argument("--blocklist", type=Path, default=Path(__file__).with_name("blocklist.txt"))
     ap.add_argument("--insecure", action="store_true", help="skip TLS verification for https Pi-hole URLs")
-    ap.add_argument("--dry-run", action="store_true", help="report only, do not modify the blocklist")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="report only: do not modify the blocklist or send alerts (prints them instead)")
+    ap.add_argument("--config", type=Path, default=Path(__file__).with_name("adshield.conf"),
+                    help="alert settings (default: adshield.conf next to this script)")
+    ap.add_argument("--test-alert", action="store_true", help="send a test alert to every channel and exit")
     args = ap.parse_args()
+    notifier = Notifier(args.config, args.dry_run)
+    if args.test_alert:
+        if not notifier.channels and not notifier.cfg.get("HA_URL"):
+            ap.error(f"no alert channels configured in {args.config}")
+        notifier.ha_sensor({"test": True, "last_run": datetime.now().isoformat(timespec="seconds")})
+        sent = notifier.send("Test alert", "Alerts from detect_adshield.py are working.", event="test")
+        return 0 if sent or not notifier.channels else 1
     if args.no_script and args.no_log:
         ap.error("nothing to do: both --no-script and --no-log given")
 
@@ -354,22 +520,31 @@ def main():
     listed = lambda d: "already listed" if f"||{d}^" in existing else "new"
     found = {}  # domain -> source label, in discovery order
     failed = False
+    stats = {"decoded_copies": None, "decode_failures": 0}
 
     if not args.no_script:
         urls = args.script_url or SCRIPT_URLS
         decoded = 0
+        decode_failures = []  # downloaded but not decodable: the obfuscation format changed
         print("Ad-Shield script copies:")
         for url in urls:
             try:
                 ver, domains = script_domains(url)
-            except (urllib.error.URLError, ValueError, SyntaxError, OSError) as e:
-                print(f"  {url}\n      failed: {e}")
+            except (ValueError, SyntaxError) as e:
+                print(f"  {url}\n      DECODE FAILED: {e}")
+                decode_failures.append((url, f"{type(e).__name__}: {e}"))
+                continue
+            except OSError as e:  # network errors and timeouts (includes URLError)
+                print(f"  {url}\n      download failed: {e}")
                 continue
             decoded += 1
             domains = [d for d in domains if d not in exclude]
             print(f"  {url} ({ver})\n      {' -> '.join(domains) or '(no domains)'}")
             for d in domains:
                 found.setdefault(d, "Ad-Shield script")
+        notifier.decoder_status(decode_failures, len(urls), decoded)
+        stats.update(decoded_copies=f"{decoded}/{len(urls)}", decode_failures=len(decode_failures),
+                     rotation_domains=[d for d, src in found.items() if src == "Ad-Shield script"])
         if not decoded:
             print("No copy of the Ad-Shield script could be decoded.", file=sys.stderr)
             failed = True
@@ -403,6 +578,8 @@ def main():
             found.setdefault(base, "Pi-hole log")
 
     new = [(d, src) for d, src in found.items() if f"||{d}^" not in existing]
+    notifier.ha_sensor(dict(stats, last_run=datetime.now().isoformat(timespec="seconds"),
+                            new_domains=[d for d, _ in new], listed=len(existing) + len(new)))
     if not new:
         print(f"\n{args.blocklist} is up to date.")
         return 1 if failed else 0
