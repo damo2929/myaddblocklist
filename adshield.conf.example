@@ -30,8 +30,12 @@ TELEGRAM_CHAT_ID=
 #   event (decoder_failed | decoder_recovered | test), title, message, host
 # e.g. use {{ trigger.json.title }} / {{ trigger.json.message }} in a notify action.
 HA_WEBHOOK_URL=
+# Also POST each run's status to the webhook as event "status" (no token needed):
+#   state (ok | decoder_failing), decoded_copies, decode_failures, rotation_domains,
+#   new_domains, listed, last_run, host. Set to "no" to send alerts only.
+HA_WEBHOOK_STATUS=yes
 
-# --- Home Assistant: status sensor (updated every run) ---------------------------------
+# --- Home Assistant: REST sensor (alternative to the webhook status; needs a token) -----
 # Profile > Security > Long-lived access tokens. The entity is created on first update;
 # state is "ok" or "decoder_failing", attributes include decoded_copies, rotation_domains,
 # new_domains, listed and last_run.

@@ -364,22 +364,37 @@ class Notifier:
                 self._save({})
 
     def ha_sensor(self, attrs):
-        """Set a Home Assistant entity to this run's status via the REST API (every run)."""
-        url, token = self.cfg.get("HA_URL"), self.cfg.get("HA_TOKEN")
-        if not (url and token):
-            return
-        entity = self.cfg.get("HA_ENTITY", "sensor.adshield")
+        """Report this run's status to Home Assistant (every run).
+
+        Via the webhook (no token): POST {"event": "status", "state", ...attrs} to HA_WEBHOOK_URL,
+        unless HA_WEBHOOK_STATUS=no; an automation stores it in helpers.
+        Via the REST API (needs HA_URL + HA_TOKEN): set HA_ENTITY directly.
+        """
         state = "decoder_failing" if attrs.get("decode_failures") else "ok"
-        attrs = dict(attrs, friendly_name="Ad-Shield blocklist", icon="mdi:shield-check"
-                     if state == "ok" else "mdi:shield-alert", host=self.host)
+        attrs = dict(attrs, host=self.host)
+        hook = self.cfg.get("HA_WEBHOOK_URL")
+        send_hook = hook and self.cfg.get("HA_WEBHOOK_STATUS", "yes").lower() not in ("no", "false", "0")
+        url, token = self.cfg.get("HA_URL"), self.cfg.get("HA_TOKEN")
+        entity = self.cfg.get("HA_ENTITY", "sensor.adshield")
         if self.dry_run:
-            print(f"--dry-run: would set {entity} = {state} {json.dumps(attrs)}")
+            if send_hook:
+                print(f"--dry-run: would post status {state} to the Home Assistant webhook {json.dumps(attrs)}")
+            if url and token:
+                print(f"--dry-run: would set {entity} = {state}")
             return
-        try:
-            _post(f"{url.rstrip('/')}/api/states/{entity}", json_body={"state": state, "attributes": attrs},
-                  headers={"Authorization": f"Bearer {token}"})
-        except (OSError, ValueError) as e:
-            print(f"Home Assistant sensor update failed: {e}", file=sys.stderr)
+        if send_hook:
+            try:
+                _post(hook, json_body=dict(attrs, event="status", state=state))
+            except (OSError, ValueError) as e:
+                print(f"Home Assistant status webhook failed: {e}", file=sys.stderr)
+        if url and token:
+            api_attrs = dict(attrs, friendly_name="Ad-Shield blocklist",
+                             icon="mdi:shield-check" if state == "ok" else "mdi:shield-alert")
+            try:
+                _post(f"{url.rstrip('/')}/api/states/{entity}", json_body={"state": state, "attributes": api_attrs},
+                      headers={"Authorization": f"Bearer {token}"})
+            except (OSError, ValueError) as e:
+                print(f"Home Assistant sensor update failed: {e}", file=sys.stderr)
 
     def _save(self, state):
         try:

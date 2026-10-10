@@ -249,8 +249,8 @@ trigger alerts, since mirrors are often flaky.
 |---|---|---|
 | Email | `NOTIFY_TO`, `NOTIFY_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY` (`none`/`starttls`/`ssl`) | Through your SMTP relay; no SMTP login is supported. |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Bot from @BotFather; chat id from `getUpdates`. |
-| Home Assistant webhook | `HA_WEBHOOK_URL` | POSTs `{event, title, message, host}`; `event` is `decoder_failed`, `decoder_recovered` or `test`. Trigger an automation from it. |
-| Home Assistant sensor | `HA_URL`, `HA_TOKEN`, `HA_ENTITY` (default `sensor.adshield`) | Updated **every run** via the REST API with a long-lived token. State `ok` / `decoder_failing`; attributes `decoded_copies`, `decode_failures`, `rotation_domains`, `new_domains`, `listed`, `last_run`. |
+| Home Assistant webhook | `HA_WEBHOOK_URL`, `HA_WEBHOOK_STATUS` (default `yes`) | POSTs `{event, title, message, host}` for alerts (`decoder_failed`, `decoder_recovered`, `test`). With `HA_WEBHOOK_STATUS=yes` it also POSTs `event: status` **every run** with `state` (`ok`/`decoder_failing`), `decoded_copies`, `decode_failures`, `rotation_domains`, `new_domains`, `listed`, `last_run`. No token needed. |
+| Home Assistant REST sensor | `HA_URL`, `HA_TOKEN`, `HA_ENTITY` (default `sensor.adshield`) | Optional alternative for the status: sets the entity directly every run, but needs a long-lived token. A state set this way isn't kept across HA restarts. |
 
 Setup on the Pi-hole:
 
@@ -261,23 +261,44 @@ vi adshield.conf
 python3 detect_adshield.py --test-alert
 ```
 
-Example Home Assistant automation for the webhook:
+### Home Assistant setup (current)
+
+Everything runs over the local-only webhook, so no token is involved:
+
+- **Automation** "Ad-Shield blocklist alerts" (`automation.ad_shield_blocklist_alerts`), with a
+  webhook trigger (random ID, `local_only`, POST only):
+  - `event: status`: silently updates the helpers below.
+  - anything else (`decoder_failed`, `decoder_recovered`, `test`): sends the title and message
+    to `notify.mobile_app_cph2791` and a persistent notification (`notification_id: adshield`,
+    so each alert replaces the last).
+- **Helpers**, updated every hourly run and usable on dashboards or in automations:
+
+  | Entity | Holds |
+  |---|---|
+  | `input_select.ad_shield_status` | `ok` / `decoder_failing` / `unknown` |
+  | `input_text.ad_shield_decoded_copies` | e.g. `4/5` |
+  | `input_text.ad_shield_rotation_domains` | domains decoded from the script |
+  | `input_text.ad_shield_last_new_domains` | the last domains added (kept until the next addition) |
+  | `input_number.ad_shield_listed_domains` | number of entries in the blocklist |
+  | `input_datetime.ad_shield_last_run` | time of the last run, so a stalled cron shows up |
+
+A minimal webhook automation that only does the notification part:
 
 ```yaml
 triggers:
   - trigger: webhook
-    webhook_id: adshield            # HA_WEBHOOK_URL=http://HA:8123/api/webhook/adshield
+    webhook_id: adshield-<random>     # HA_WEBHOOK_URL=http://HA:8123/api/webhook/adshield-<random>
     allowed_methods: [POST]
     local_only: true
+conditions:
+  - condition: template
+    value_template: "{{ trigger.json.event != 'status' }}"
 actions:
   - action: notify.notify
     data:
       title: "{{ trigger.json.title }}"
       message: "{{ trigger.json.message }}"
 ```
-
-A sensor state set through the REST API isn't kept across Home Assistant restarts. It comes
-back on the next hourly run.
 
 ## Deployment (current setup)
 
