@@ -19,6 +19,56 @@ This project doesn't wait for the next domain to show up. It reads Ad-Shield's o
 them. The Pi-hole log scan is a backup for anything that gets through first. The aim is to
 stay ahead in that race instead of reacting to each move after the ads have already loaded.
 
+## Where the code runs: on the visitor's device, not the server
+
+None of Ad-Shield's workaround happens on Phoronix's server. All of it is JavaScript sent
+to the visitor's browser and run **on the visitor's own computer**:
+
+- **Loader:** the obfuscated recovery script is inline in the page HTML. The browser runs
+  it, and it removes its own `<script>` tag, then injects new script tags to fetch the
+  next stage.
+- **Stage-2 script:** about 180KB of obfuscated JavaScript fetched from public CDNs
+  (`cdn.jsdelivr.net/gh/ad-shield/e/index.js` and mirrors) and run in the browser. This
+  is where the rotation domains are tried and the ads are loaded.
+- **Last-resort code delivery:** if every script URL is blocked, the loader opens a
+  WebSocket to `wss://html-load.cc/ws`, takes whatever JavaScript comes back, puts it in a
+  new `<script>` element and runs it. That code is never visible in the page source.
+- **Blocker detection on the device:** it sends bait requests (`ad-delivery.net/px.gif`),
+  loads FingerprintJS BotD (`m1.openfpcdn.io/botd`) to check for automated browsers, and
+  writes what it found to the device's `localStorage`:
+
+  | Key (stored base64-encoded as `<host>_fa_<key>`) | Example value |
+  |---|---|
+  | `cache_is_blocking_ads` | `true` |
+  | `cache_request_filter_active` | `true` |
+  | `cache_cosmetic_filter_active` | `false` |
+  | `cache_is_blocking_acceptable_ads` | `true` |
+  | `cache_adblock_circumvent_score` | `3` |
+  | `blocked_script_cache` | base64 JSON list of scripts that were blocked |
+
+**It's third-party code.** None of this comes from Phoronix itself. It's Ad-Shield's code,
+served from Ad-Shield's GitHub repository (`github.com/ad-shield/e`, through public CDNs) and
+from domains Ad-Shield controls (`html-load.cc` and the rotation domains). We have no
+relationship with Ad-Shield and have **not consented** to it running code on our devices.
+Blocking its domains with an ad blocker or DNS filter is an explicit refusal.
+
+So code from a third party we haven't agreed to is delivered to, stored on and run on the
+user's machine, specifically to get around that refusal.
+
+**A regulatory gap.** The UK Online Safety Act 2023's duties on fraudulent (scam) adverts
+apply only to services Ofcom designates as Category 1 (the largest social media platforms)
+or Category 2A (the largest search engines). Even for them, the codes are still in draft:
+Ofcom's consultation closed on 2 October 2026, with final codes due by mid-2027. Ad-tech
+intermediaries such as ad-recovery and ad-delivery networks aren't directly regulated by the
+Act. Ofcom's draft reaches them only through the big platforms that use them, and
+commentators have described third-party ad delivery as a gap in the framework. So nothing
+currently requires these networks to vet what they push past a user's blocker onto their
+screen, which is one more reason to block them yourself.
+Sources: [Ofcom consultation](https://www.ofcom.org.uk/online-safety/online-fraud/consultation-fraudulent-advertising-code-of-practice),
+[RPC](https://www.rpclegal.com/snapshots/advertising-and-marketing/autumn-2026/online-safety-act-ofcom-consults-on-fraudulent-advertising-codes/),
+[Wiggin](https://wiggin.co.uk/insight/fraudulent-advertising-ofcom-consults-on-new-rules-under-online-safety-act/),
+[University of Essex](https://repository.essex.ac.uk/42524/).
+
 ## Contents
 
 | File | Purpose |
