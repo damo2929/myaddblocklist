@@ -1,0 +1,31 @@
+# Blocklist: Ad-Shield rotating ad-proxy domains (Phoronix and others) + Freestar
+# Format: ABP-style "||domain^" - Pi-hole v6 blocks the domain and ALL its subdomains,
+# which covers Ad-Shield's numbered shards (0-9.<domain>) with a single entry.
+# Maintained by detect_adshield.py (hourly cron on the Pi-hole, /opt/adshield).
+#
+# Ad-Shield load chain: <domain>/script/<b64 host>.js, then ads via <n>.<domain>.
+# Stage-2 script is served from cdn.jsdelivr.net/gh/ad-shield/ (and statically.io /
+# githack mirrors); those shared CDNs are not blocked here as that breaks other sites.
+
+# Ad-Shield rotation domains
+||html-load.cc^
+||abaftwetly.com^
+||referwhen.com^
+||exceptlone.com^
+||worstcommon.com^
+||nicelyeven.com^
+
+# Ad-block detection bait pixel
+||ad-delivery.net^
+
+# Freestar primary ad stack
+||a.pub.network^
+
+# Auto-detected by detect_adshield.py on 2026-10-10 17:16 from Ad-Shield script
+||tilljoyfully.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-10 17:16 from Ad-Shield script
+||betweenbrr.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-10 17:16 from Ad-Shield script
+||reallywire.com^
