@@ -29,3 +29,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-10 17:16 from Ad-Shield script
 ||reallywire.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-11 10:17 from Ad-Shield script
+||cramminion.com^
