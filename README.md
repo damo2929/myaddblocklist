@@ -354,7 +354,11 @@ Each hourly run of `deploy/run.sh`:
    deploy key it still updates the Pi-hole and keeps the commits locally.
 
 `run.sh` runs `pihole reloadlists` after `pihole -g`: without it, FTL kept answering newly
-listed domains until it was told to reload.
+listed domains until it was told to reload. It also puts `/usr/local/bin` on `PATH`, because
+cron's default PATH doesn't include it and `pihole` lives there: from 10 to 13 Oct 2026 three
+domains were committed and pushed but never reached gravity for that reason, and the failure was
+invisible because the wrapper discarded the error. A failed reload is now logged as
+`gravity reload FAILED`.
 
 Because the Pi-hole pulls from GitHub every hour and runs the code as root, anything pushed
 to `main` ends up running on the Pi-hole. Review changes before pushing.

@@ -3,6 +3,8 @@
 # /opt/adshield is a clone of github.com/damo2929/myaddblocklist. Pushing needs a write deploy
 # key at $KEY; without it the list is still updated and reloaded locally, just not pushed.
 KEY=/root/.ssh/adshield_deploy
+# cron's PATH (/sbin:/bin:/usr/sbin:/usr/bin) doesn't include /usr/local/bin, where pihole lives.
+export PATH=/usr/local/sbin:/usr/local/bin:$PATH
 cd /opt/adshield || exit 1
 echo "== $(date '+%F %T')"
 
@@ -30,8 +32,13 @@ elif [ $rc -eq 2 ]; then
 fi
 
 if [ $reload -eq 1 ]; then
-  # gravity rebuilds the list; reloadlists makes FTL start answering from it immediately
-  pihole -g >/dev/null 2>&1 && pihole reloadlists >/dev/null 2>&1 && echo "gravity reloaded"
+  # gravity rebuilds the list; reloadlists makes FTL start answering from it immediately.
+  # Keep stderr so a failure is visible in the log instead of leaving the list stale.
+  if pihole -g >/dev/null && pihole reloadlists >/dev/null; then
+    echo "gravity reloaded"
+  else
+    echo "gravity reload FAILED (rc=$?): new entries are committed but not yet blocking"
+  fi
 fi
 
 # Push only if there are blocklist commits not yet on GitHub (incl. ones from failed pushes).
