@@ -181,8 +181,10 @@ def decode_strings(src):
     offset = int(dec_m.group(3), 16)
 
     # The array is rotated at start-up until a checksum of parseInt(decoded) terms matches.
+    # The expression may start with a sign or bracket ("-parseInt(", "(-parseInt("): the
+    # obfuscator picks a random mix, and since 2026-10-12 some copies begin with a negative term.
     rot_m = re.search(r"\}\(%s,(-?0x[0-9a-f]+)\)" % arr_name, src)
-    expr_m = rot_m and re.search(r"var \w+=(parseInt\(.*?);if\(\w+===\w+\)break", src[:rot_m.end()])
+    expr_m = rot_m and re.search(r"var \w+=([-+(]*parseInt\(.*?);if\(\w+===\w+\)break", src[:rot_m.end()])
     if not expr_m:
         raise ValueError("rotation checksum not found")
     target, expr = int(rot_m.group(1), 16), expr_m.group(1)
@@ -232,6 +234,10 @@ def script_domains(url):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=30) as r:
         src = r.read().decode("utf-8")
+    # A mirror that stalls mid-stream (statically.io cuts off at 64 KiB) must count as a
+    # download failure, not as a change in the obfuscation: the script ends with its IIFE close.
+    if not src.rstrip().endswith("})();"):
+        raise OSError(f"truncated download ({len(src)} bytes)")
     text = decode_strings(src)
     domains = []
     for lit in re.findall(_STR, text):

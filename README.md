@@ -174,8 +174,9 @@ For per-browser coverage of the stage-2 script, add path rules such as
 1. Download every copy of the stage-2 script: `raw.githubusercontent.com/ad-shield/e`,
    jsDelivr, statically and both githack mirrors. The repo is force-pushed and the CDNs
    cache it for different lengths of time, so the copies carry different rotation windows;
-   the results are merged. A copy that fails is skipped. (statically's `/gl/` and `/bb/`
-   paths are still in the loader but no longer work, so they're not fetched.)
+   the results are merged. A copy that fails or arrives truncated (statically stalls at
+   64 KiB) is skipped as a download failure and doesn't trigger a decoder alert. (statically's
+   `/gl/` and `/bb/` paths are still in the loader but no longer work, so they're not fetched.)
 2. Decode the obfuscated string table with a **pure-Python port** of obfuscator.io's
    decoder (custom base64 + RC4, plus the start-up array rotation). No Ad-Shield code is
    run: the only thing evaluated is the rotation checksum, after checking it contains
@@ -393,7 +394,9 @@ ssh root@192.168.5.253 'pihole -q 5.nicelyeven.com; tail /var/log/adshield.log; 
   "decoder not found" or "rotation checksum not found" and the exit code becomes 1. The
   log scan keeps working as a backup; `decode_strings()` then needs updating. This is
   reported through the [alerts](#alerts-email-telegram-home-assistant) as soon as any copy
-  fails.
+  fails. It has happened once so far: on 2026-10-12 the layout changed (decoder function moved
+  ahead of the rotation loop, checksum expression starting with a negative term) and only the
+  checksum regex needed widening to accept a leading sign.
 - **Log scan has a gap of up to an hour.** A domain that isn't in any script copy is only
   seen after a browser on the network has used it.
 - **Headless Chrome didn't work:** Phoronix shows a Cloudflare bot check on the second page
