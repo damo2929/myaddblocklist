@@ -35,3 +35,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-12 16:17 from Pi-hole log
 ||quahowever.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-13 10:17 from Ad-Shield script
+||bowlingpish.com^
