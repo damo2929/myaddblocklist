@@ -38,3 +38,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-13 10:17 from Ad-Shield script
 ||bowlingpish.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-14 10:17 from Ad-Shield script
+||daintilyrare.com^
