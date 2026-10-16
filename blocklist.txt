@@ -47,3 +47,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-16 02:17 from Ad-Shield script
 ||brrindeed.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-16 18:17 from Ad-Shield script
+||similaroof.com^
