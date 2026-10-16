@@ -50,3 +50,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-16 18:17 from Ad-Shield script
 ||similaroof.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-16 22:17 from Ad-Shield script
+||neverveto.com^
