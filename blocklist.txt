@@ -62,3 +62,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-22 07:17 from Ad-Shield script
 ||upwardlywell.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-22 12:17 from Ad-Shield script
+||towardmould.com^
