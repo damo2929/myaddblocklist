@@ -56,3 +56,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-17 04:17 from Ad-Shield script
 ||aboardyahoo.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-22 01:17 from Ad-Shield script
+||thatopenly.com^
