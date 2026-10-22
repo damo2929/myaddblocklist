@@ -68,3 +68,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-22 18:17 from Ad-Shield script
 ||certainwing.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-22 23:17 from Ad-Shield script
+||coyoteshell.com^
