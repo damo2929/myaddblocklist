@@ -80,3 +80,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-23 13:17 from Ad-Shield script
 ||splendidaspen.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-23 18:17 from Ad-Shield script
+||livelycanoe.com^
