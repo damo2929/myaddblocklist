@@ -86,3 +86,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-24 00:17 from Ad-Shield script
 ||zestyalto.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-24 06:17 from Ad-Shield script
+||amusedradish.com^
