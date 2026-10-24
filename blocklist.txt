@@ -95,3 +95,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-24 16:17 from Ad-Shield script
 ||keennight.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-24 20:17 from Ad-Shield script
+||upbeatspring.com^
