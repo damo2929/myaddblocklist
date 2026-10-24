@@ -92,3 +92,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-24 11:17 from Ad-Shield script
 ||badgertulip.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-24 16:17 from Ad-Shield script
+||keennight.com^
