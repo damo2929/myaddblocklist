@@ -98,3 +98,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-24 20:17 from Ad-Shield script
 ||upbeatspring.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-25 02:17 from Ad-Shield script
+||airyorchid.com^
