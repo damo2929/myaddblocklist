@@ -107,3 +107,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-25 12:17 from Ad-Shield script
 ||leopardmoss.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-25 23:17 from Ad-Shield script
+||eagleblossom.com^
