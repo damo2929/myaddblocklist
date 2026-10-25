@@ -101,3 +101,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-25 02:17 from Ad-Shield script
 ||airyorchid.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-25 07:17 from Ad-Shield script
+||gifteddonut.com^
