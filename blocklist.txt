@@ -110,3 +110,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-25 23:17 from Ad-Shield script
 ||eagleblossom.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-26 03:17 from Ad-Shield script
+||neatwheel.com^
