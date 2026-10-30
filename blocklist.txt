@@ -149,3 +149,6 @@
 
 # Auto-detected by detect_adshield.py on 2026-10-30 07:17 from Ad-Shield script
 ||neatcosmos.com^
+
+# Auto-detected by detect_adshield.py on 2026-10-30 12:17 from Ad-Shield script
+||gratefuldawn.com^
